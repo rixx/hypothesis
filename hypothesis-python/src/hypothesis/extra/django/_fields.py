@@ -231,7 +231,7 @@ def register_field_strategy(field_type, strategy):
     _global_field_lookup[field_type] = strategy
 
 
-def from_field(field, __infer_related_fields=False):
+def from_field(field, __infer_related_fields=False, __context=None):
     # type: (Type[dm.Field]) -> st.SearchStrategy[dm.Field]
     """Return a strategy for values that fit the given field.
 
@@ -261,17 +261,18 @@ def from_field(field, __infer_related_fields=False):
         if isinstance(field, (df.MultipleChoiceField, df.TypedMultipleChoiceField)):
             strategy = st.lists(st.sampled_from(choices), min_size=min_size)
     else:
-        if type(field) not in _global_field_lookup:
-            if getattr(field, "null", False):
-                return st.none()
-            related_model = getattr(field, "related_model")
+        related_model = getattr(field, "related_model")
+        lookup_key = related_model or type(field)
+        if lookup_key not in _global_field_lookup:
             if related_model and __infer_related_fields:
                 from hypothesis.extra.django import from_model
-                model_strategy = from_model(related_model)
-                _global_field_lookup[field] = model_strategy
-                return model_strategy
-            raise InvalidArgument("Could not infer a strategy for %r", (field,))
-        strategy = _global_field_lookup[type(field)]
+                context = __context or {}
+                _global_field_lookup[lookup_key] = from_model(related_model, **context)
+            elif getattr(field, "null", False):
+                return st.none()
+            else:
+                raise InvalidArgument("Could not infer a strategy for %r", (field,))
+        strategy = _global_field_lookup[lookup_key]
         if not isinstance(strategy, st.SearchStrategy):
             strategy = strategy(field)
     assert isinstance(strategy, st.SearchStrategy)

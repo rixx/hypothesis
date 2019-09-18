@@ -18,6 +18,7 @@
 from __future__ import absolute_import, division, print_function
 
 import unittest
+from collections import defaultdict
 from functools import partial
 
 import django.db.models as dm
@@ -64,6 +65,7 @@ class TransactionTestCase(HypothesisTestCase, dt.TransactionTestCase):
 @st.defines_strategy
 def from_model(
     model,  # type: Type[dm.Model]
+    __infer_related_fields=False,
     **field_strategies  # type: Union[st.SearchStrategy[Any], InferType]
 ):
     # type: (...) -> st.SearchStrategy[Any]
@@ -95,8 +97,13 @@ def from_model(
         raise InvalidArgument("model=%r must be a subtype of Model" % (model,))
 
     fields_by_name = {f.name: f for f in model._meta.concrete_fields}
+    field_context = defaultdict(dict)
     for name, value in sorted(field_strategies.items()):
-        if value is infer:
+        if '__' in name:
+            field_name, _, field_value = name.partition('__')
+            field_context[field_name][field_value] = value
+            field_strategies.pop(name)
+        elif value is infer:
             field_strategies[name] = from_field(fields_by_name[name])
     for name, field in sorted(fields_by_name.items()):
         if (
@@ -104,7 +111,11 @@ def from_model(
             and not field.auto_created
             and field.default is dm.fields.NOT_PROVIDED
         ):
-            field_strategies[name] = from_field(field)
+            field_strategies[name] = from_field(
+                field,
+                __context=field_context.get(name),
+                __infer_related_fields=__infer_related_fields,
+            )
 
     for field in field_strategies:
         if model._meta.get_field(field).primary_key:
