@@ -231,7 +231,7 @@ def register_field_strategy(field_type, strategy):
     _global_field_lookup[field_type] = strategy
 
 
-def from_field(field):
+def from_field(field, __infer_related_fields=False):
     # type: (Type[dm.Field]) -> st.SearchStrategy[dm.Field]
     """Return a strategy for values that fit the given field.
 
@@ -264,6 +264,12 @@ def from_field(field):
         if type(field) not in _global_field_lookup:
             if getattr(field, "null", False):
                 return st.none()
+            related_model = getattr(field, "related_model")
+            if related_model and __infer_related_fields:
+                from hypothesis.extra.django import from_model
+                model_strategy = from_model(related_model)
+                _global_field_lookup[field] = model_strategy
+                return model_strategy
             raise InvalidArgument("Could not infer a strategy for %r", (field,))
         strategy = _global_field_lookup[type(field)]
         if not isinstance(strategy, st.SearchStrategy):
