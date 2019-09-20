@@ -65,6 +65,7 @@ class TransactionTestCase(HypothesisTestCase, dt.TransactionTestCase):
 @st.defines_strategy
 def from_model(
     model,  # type: Type[dm.Model]
+    __save=True,
     __infer_related_fields=False,
     **field_strategies  # type: Union[st.SearchStrategy[Any], InferType]
 ):
@@ -129,7 +130,9 @@ def from_model(
     # The primary key is not generated as part of the strategy, so we
     # just match against any row that has the same value for all
     # fields.
-    return _models_impl(st.builds(model.objects.get_or_create, **field_strategies))
+    if __save:
+        return _models_impl(st.builds(model.objects.get_or_create, **field_strategies))
+    return _models_impl(st.builds(model, **field_strategies))
 
 
 @st.composite
