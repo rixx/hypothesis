@@ -231,7 +231,7 @@ def register_field_strategy(field_type, strategy):
     _global_field_lookup[field_type] = strategy
 
 
-def from_field(field, __infer_related_fields=False, __context=None):
+def from_field(field, commit=True, __infer_related_fields=False, __context=None):
     # type: (Type[dm.Field]) -> st.SearchStrategy[dm.Field]
     """Return a strategy for values that fit the given field.
 
@@ -267,7 +267,12 @@ def from_field(field, __infer_related_fields=False, __context=None):
             if related_model and __infer_related_fields:
                 from hypothesis.extra.django import from_model
                 context = __context or {}
-                _global_field_lookup[lookup_key] = from_model(related_model, **context)
+                _global_field_lookup[lookup_key] = from_model(
+                    related_model,
+                    __infer_related_fields=__infer_related_fields,
+                    commit=commit,
+                    **context,
+                )
             elif getattr(field, "null", False):
                 return st.none()
             else:

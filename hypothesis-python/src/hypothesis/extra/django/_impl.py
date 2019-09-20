@@ -65,7 +65,7 @@ class TransactionTestCase(HypothesisTestCase, dt.TransactionTestCase):
 @st.defines_strategy
 def from_model(
     model,  # type: Type[dm.Model]
-    __save=True,
+    commit=True,
     __infer_related_fields=False,
     **field_strategies  # type: Union[st.SearchStrategy[Any], InferType]
 ):
@@ -105,7 +105,11 @@ def from_model(
             field_context[field_name][field_value] = value
             field_strategies.pop(name)
         elif value is infer:
-            field_strategies[name] = from_field(fields_by_name[name])
+            field_strategies[name] = from_field(
+                fields_by_name[name],
+                __infer_related_fields=__infer_related_fields,
+                commit=commit,
+            )
     for name, field in sorted(fields_by_name.items()):
         if (
             name not in field_strategies
@@ -116,10 +120,11 @@ def from_model(
                 field,
                 __context=field_context.get(name),
                 __infer_related_fields=__infer_related_fields,
+                commit=commit,
             )
 
     for field in field_strategies:
-        if model._meta.get_field(field).primary_key:
+        if model._meta.get_field(field).primary_key and commit:
             # The primary key is generated as part of the strategy. We
             # want to find any existing row with this primary key and
             # overwrite its contents.
@@ -130,7 +135,7 @@ def from_model(
     # The primary key is not generated as part of the strategy, so we
     # just match against any row that has the same value for all
     # fields.
-    if __save:
+    if commit:
         return _models_impl(st.builds(model.objects.get_or_create, **field_strategies))
     return _models_impl(st.builds(model, **field_strategies))
 
@@ -139,7 +144,10 @@ def from_model(
 def _models_impl(draw, strat):
     """Handle the nasty part of drawing a value for models()"""
     try:
-        return draw(strat)[0]
+        result = draw(strat)
+        if isinstance(result, tuple):
+            return result[0]
+        return result
     except IntegrityError:
         reject()
 
